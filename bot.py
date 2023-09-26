@@ -5,7 +5,7 @@ from aiogram import Bot, Dispatcher
 from aiogram.fsm.storage.memory import MemoryStorage
 
 from tg_bot.config import load_config
-from tg_bot.handlers import echo
+from tg_bot.handlers import echo, clinic_details, doc_details
 
 from tg_bot.handlers import start
 
@@ -24,7 +24,7 @@ async  def main():
     bot = Bot(token=config.tg_bot.token, parse_mode='HTML')
     storage = MemoryStorage()
     dp = Dispatcher(storage=storage)
-    dp.include_routers(start.router,echo.router)
+    dp.include_routers(start.router, clinic_details.router,doc_details.router)
     register_all_middlewares(dp=dp)
     register_all_filters(dp=dp)
 
