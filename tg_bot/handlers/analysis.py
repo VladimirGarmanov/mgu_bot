@@ -5,7 +5,7 @@ from aiogram.fsm.state import State, StatesGroup
 from aiogram.fsm.context import FSMContext
 from aiogram.types import Message, PhotoSize
 import os
-
+from datetime import datetime
 router = Router()
 
 
@@ -39,11 +39,13 @@ async def handle_photo(msg: Message, state: FSMContext, bot: Bot):
         return
 
     if msg.text == 'стоп':
+        await msg.answer('Ваши фотографии отправлены врачу')
         await state.set_state(None)
         data = await state.get_data()
+        date = datetime.now()
         photos: list = data["photos"]
         name: str = data["name"]
-        photo_dir = f'photos/{name}'
+        photo_dir = f'photos/{name}{date}'
         os.makedirs(photo_dir, exist_ok=True)
         for file_id in photos:
             print(f"doing {file_id}")
