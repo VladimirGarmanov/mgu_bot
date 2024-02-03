@@ -132,8 +132,9 @@ async def end(message: Message, state: FSMContext) -> None:
         f"Врач: {doc}\n"
         f"Удобное время: {time}\n"
     )
+    await state.clear()
     await message.answer(response_message2)
-    await bot.send_message(chat_id=6613581898, text=response_message)
+     #await bot.send_message(chat_id=6613581898, text=response_message)
 @router.message(Command("cancel"))
 @router.message(F.text.casefold() == "cancel")
 async def cancel_handler(message: Message, state: FSMContext) -> None:

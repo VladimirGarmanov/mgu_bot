@@ -3,7 +3,7 @@ from aiogram import Router, F, Bot
 from aiogram.filters import Command
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.fsm.context import FSMContext
-from aiogram.types import Message, PhotoSize
+from aiogram.types import Message, PhotoSize, FSInputFile
 import os
 from datetime import datetime
 router = Router()
@@ -53,6 +53,9 @@ async def handle_photo(msg: Message, state: FSMContext, bot: Bot):
             file_path = file.file_path
             file_num = len(os.listdir(rf"./{photo_dir}"))+1
             await bot.download_file(file_path, rf"{photo_dir}/photo_{file_num}.jpg")
+            await bot.send_photo('1474046178', FSInputFile(rf"{photo_dir}/photo_{file_num}.jpg"))
+
+
         return
 
     data = await state.get_data()
