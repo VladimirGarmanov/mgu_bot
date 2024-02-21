@@ -6,7 +6,7 @@ from typing import Any, Dict
 
 
 
-from aiogram import Bot, Dispatcher, F, Router, html
+from aiogram import  Dispatcher, F, Router, html
 from aiogram.enums import ParseMode
 from aiogram.filters import Command, CommandStart
 from aiogram.fsm.context import FSMContext
@@ -20,7 +20,8 @@ from aiogram.types import (
 from tg_bot.keyboards.docType import docTypes
 from tg_bot.keyboards.consultType import typeCons
 router = Router()
-bot = Bot(token='6517527928:AAHtrSHL1C0B7A5ALXapsYrjVl-h9UY-cpc')
+from bot import Bot
+bot = Bot
 
 
 class Form(StatesGroup):
@@ -47,12 +48,15 @@ async def name(message: Message, state: FSMContext) -> None:
 
 @router.message(Form.name)
 async def age(message: Message, state: FSMContext) -> None:
+
     await state.update_data(name=message.text)
     await state.set_state(Form.age)
     await message.answer(
         f"Введите Ваш возраст",
 
     )
+    if message.text == 'отмена':
+        await state.clear()
 
 
 @router.message(Form.age)
@@ -63,6 +67,8 @@ async def email(message: Message, state: FSMContext) -> None:
         "Введите ваш email",
         reply_markup=ReplyKeyboardRemove(),
     )
+    if message.text == 'отмена':
+        await state.clear()
 
 
 @router.message(Form.email)
@@ -73,6 +79,8 @@ async def number(message: Message, state: FSMContext) -> None:
         "Введите ваш номер телефона",
         reply_markup=ReplyKeyboardRemove(),
     )
+    if message.text == 'отмена':
+        await state.clear()
 @router.message(Form.number)
 async def consult(message: Message, state: FSMContext) -> None:
     await state.update_data(number=message.text)
@@ -89,6 +97,8 @@ async def docType(message: Message, state: FSMContext) -> None:
         "Выберите врача",
         reply_markup=docTypes
     )
+    if message.text == 'отмена':
+        await state.clear()
 @router.message(Form.doc)
 async def time(message: Message, state: FSMContext) -> None:
     await state.update_data(doc=message.text)
@@ -97,6 +107,8 @@ async def time(message: Message, state: FSMContext) -> None:
         "Выберите время",
         reply_markup=ReplyKeyboardRemove()
     )
+    if message.text == 'отмена':
+        await state.clear()
 @router.message(Form.time)
 async def end(message: Message, state: FSMContext) -> None:
     await state.update_data(time=message.text)
@@ -135,19 +147,5 @@ async def end(message: Message, state: FSMContext) -> None:
     await state.clear()
     await message.answer(response_message2)
      #await bot.send_message(chat_id=6613581898, text=response_message)
-@router.message(Command("cancel"))
-@router.message(F.text.casefold() == "cancel")
-async def cancel_handler(message: Message, state: FSMContext) -> None:
-    """
-    Allow user to cancel any action
-    """
-    current_state = await state.get_state()
-    if current_state is None:
-        return
 
-    logging.info("Cancelling state %r", current_state)
-    await state.clear()
-    await message.answer(
-        "Cancelled.",
-        reply_markup=ReplyKeyboardRemove(),
-    )
+
