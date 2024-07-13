@@ -1,3 +1,5 @@
+import configparser
+
 import openai
 import time
 import asyncio
@@ -6,10 +8,16 @@ import sqlite3
 from aiogram import types, Router, F,Bot
 from aiogram.types import Message
 from aiogram.filters import Command
+config = configparser.ConfigParser()
 
-client = openai.OpenAI(api_key='sk-proj-EzNl6gwNCPB8zoSzO1yaT3BlbkFJIHcAASWRs7Au7Oi0tc26')
+# Чтение файла config.ini
+config.read('config.ini')
+
+# Чтение конфигурации
+openai_api_key = config.get('Config', 'openai_api_key')
+client = openai.OpenAI(api_key=openai_api_key)
 router = Router()
-Assistant_ID = 'asst_lOELwEP2IoT5lTRbBNUXayXA'
+Assistant_ID = config.get('Config', 'assistant_id')
 users = []
 
 conn = sqlite3.connect('users.db')
