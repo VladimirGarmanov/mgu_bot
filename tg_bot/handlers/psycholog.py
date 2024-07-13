@@ -15,9 +15,9 @@ config.read('config.ini')
 
 # Чтение конфигурации
 openai_api_key = config.get('Config', 'openai_api_key')
-client = openai.OpenAI(api_key=openai_api_key)
+client = openai.OpenAI(api_key='sk-proj-EzNl6gwNCPB8zoSzO1yaT3BlbkFJIHcAASWRs7Au7Oi0tc26')
 router = Router()
-Assistant_ID = config.get('Config', 'assistant_id')
+Assistant_ID = 'asst_lOELwEP2IoT5lTRbBNUXayXA'
 users = []
 
 conn = sqlite3.connect('users.db')
