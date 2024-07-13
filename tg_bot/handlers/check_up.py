@@ -22,7 +22,7 @@ from tg_bot.keyboards.check_up import pol,age_k
 from tg_bot.keyboards.docType import docTypes
 from tg_bot.keyboards.consultType import typeCons
 router = Router()
-bot = Bot(token='6517527928:AAHtrSHL1C0B7A5ALXapsYrjVl-h9UY-cpc')
+from tg_bot.keyboards.default import default
 
 
 class Form_c(StatesGroup):
@@ -64,18 +64,18 @@ async def end(message: Message, state: FSMContext) -> None:
     print(gender)
     if gender == 'Женщина':
         if age == 'от 18 до 39':
-            await message.answer('Высылаю список анализов'+"\n"+"Пока нет списка анализов",reply_markup=ReplyKeyboardRemove())
+            await message.answer('Высылаю список анализов'+"\n"+"Пока нет списка анализов", reply_markup=default)
         if age == 'от 40 до 60':
-            await message.answer('Высылаю список анализов'+"\n"+"Пока нет списка анализов",reply_markup=ReplyKeyboardRemove())
+            await message.answer('Высылаю список анализов'+"\n"+"Пока нет списка анализов", reply_markup=default)
         if age == 'больше 60':
-            await message.answer('Высылаю список анализов'+"\n"+"Пока нет списка анализов",reply_markup=ReplyKeyboardRemove())
+            await message.answer('Высылаю список анализов'+"\n"+"Пока нет списка анализов", reply_markup=default)
     if gender == 'Мужчина':
         if age == 'от 18 до 39':
-            await message.answer('Высылаю список анализов' + "\n" + "Пока нет списка анализов",reply_markup=ReplyKeyboardRemove())
+            await message.answer('Высылаю список анализов' + "\n" + "Пока нет списка анализов", reply_markup=default)
         if age == 'от 40 до 60':
-            await message.answer('Высылаю список анализов' + "\n" + "Пока нет списка анализов",reply_markup=ReplyKeyboardRemove())
+            await message.answer('Высылаю список анализов' + "\n" + "Пока нет списка анализов", reply_markup=default)
         if age == 'больше 60':
-            await message.answer('Высылаю список анализов' + "\n" + "Пока нет списка анализов",reply_markup=ReplyKeyboardRemove())
+            await message.answer('Высылаю список анализов' + "\n" + "Пока нет списка анализов", reply_markup=default)
 
 
 

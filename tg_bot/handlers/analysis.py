@@ -3,7 +3,8 @@ from aiogram import Router, F, Bot
 from aiogram.filters import Command
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.fsm.context import FSMContext
-from aiogram.types import Message, PhotoSize, FSInputFile
+from aiogram.types import Message, PhotoSize, FSInputFile, ReplyKeyboardRemove
+from tg_bot.keyboards.default import default
 import os
 from datetime import datetime
 router = Router()
@@ -18,7 +19,7 @@ class PhotoSendState(StatesGroup):
 @router.message(Command('send_analysis'), F.chat.type == 'private')
 async def start_handling_photos(msg: Message, state: FSMContext):
     await state.set_state(PhotoSendState.name)
-    await msg.reply("Напишите свое имя:")
+    await msg.reply("Напишите свое имя:", reply_markup=ReplyKeyboardRemove())
 
 
 @router.message(PhotoSendState.name, F.chat.type == 'private')
@@ -28,7 +29,7 @@ async def start_handling_photos(msg: Message, state: FSMContext):
 
     await state.set_state(PhotoSendState.sending)
     await state.update_data(photos=[], name=msg.text)
-    await msg.reply("Отправляйте фотографии. Напишите 'стоп', чтобы завершить.")
+    await msg.reply("Отправляйте фотографии. Напишите 'стоп', чтобы завершить.", reply_markup=ReplyKeyboardRemove())
 
 
 
@@ -39,7 +40,7 @@ async def handle_photo(msg: Message, state: FSMContext, bot: Bot):
         return
 
     if msg.text == 'стоп':
-        await msg.answer('Ваши фотографии отправлены врачу')
+        await msg.answer('Ваши фотографии отправлены врачу', reply_markup=default)
         await state.set_state(None)
         data = await state.get_data()
         date = datetime.now()
@@ -63,4 +64,4 @@ async def handle_photo(msg: Message, state: FSMContext, bot: Bot):
     photos.append(msg.photo[-1].file_id)
 
     await state.update_data(photos=photos)
-    await msg.reply("Фотография принята, продолжайте отправку или напишите 'стоп' чтобы закончить.")
+    await msg.reply("Фотография принята, продолжайте отправку или напишите 'стоп' чтобы закончить.", reply_markup=ReplyKeyboardRemove())

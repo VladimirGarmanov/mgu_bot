@@ -3,15 +3,13 @@ import time
 import asyncio
 import sqlite3
 
-from aiogram import types, Router, F
+from aiogram import types, Router, F,Bot
 from aiogram.types import Message
 from aiogram.filters import Command
 
-from bot import Bot
-bot = Bot
-client = openai.OpenAI(api_key="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")
+client = openai.OpenAI(api_key='sk-proj-EzNl6gwNCPB8zoSzO1yaT3BlbkFJIHcAASWRs7Au7Oi0tc26')
 router = Router()
-Assistant_ID = 'asst_EDLP7UcTFZEheK8pEYMzbchJ'
+Assistant_ID = 'asst_lOELwEP2IoT5lTRbBNUXayXA'
 users = []
 
 conn = sqlite3.connect('users.db')
@@ -24,7 +22,7 @@ conn.commit()
 
 
 # Функция для добавления пользователя в базу данных
-async def handle_with_assistant(message, chat_id):
+async def handle_with_assistant(message, chat_id, bot):
     print('генерация началась')
     cursor.execute('SELECT thread FROM users WHERE chat_id = ?', (chat_id,))
     result = cursor.fetchone()
@@ -64,7 +62,12 @@ async def handle_with_assistant(message, chat_id):
         role = msg.role
         content = msg.content[0].text.value
         print(f"{role.capitalize()}: {content}")
-        await message.answer(text=content)
+        if 'send' in content:
+            await bot.send_message(chat_id='380656544', text=f"{content} {message.from_user.username}")
+            await message.answer(text='Я передал вашу заявку нашему администратору')
+        else:
+
+            await message.answer(text=content)
 
 
 def add_user(chat_id):
@@ -80,7 +83,7 @@ async def answer_user(message_response, message):
     await message.answer(message_response)
 
 
-@router.message(Command('psycho_help'))
+@router.message(Command('manager_help'))
 async def start(message: Message):
     add_user(message.chat.id)
     users.append(message.chat.id)
@@ -88,7 +91,7 @@ async def start(message: Message):
 
 def delete_user(chat_id):
     cursor.execute("DELETE FROM users WHERE chat_id = ?", (chat_id,))
-@router.message(Command('psycho_stop'))
+@router.message(Command('manager_stop'))
 async def start(message: Message):
     delete_user(message.chat.id)
     await message.answer("Разговор прекращен.")
@@ -98,4 +101,4 @@ async def start(message: Message):
 @router.message(F.text)
 async def echo_message(message: types.Message):
     if message.chat.id in users:
-        await handle_with_assistant(message, message.chat.id)
+        await handle_with_assistant(message, message.chat.id, Bot('6517527928:AAHtrSHL1C0B7A5ALXapsYrjVl-h9UY-cpc'))

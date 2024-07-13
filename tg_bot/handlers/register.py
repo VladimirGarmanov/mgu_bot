@@ -6,7 +6,7 @@ from typing import Any, Dict
 
 
 
-from aiogram import  Dispatcher, F, Router, html
+from aiogram import  Dispatcher, F, Router, html, Bot
 from aiogram.enums import ParseMode
 from aiogram.filters import Command, CommandStart
 from aiogram.fsm.context import FSMContext
@@ -19,9 +19,8 @@ from aiogram.types import (
 )
 from tg_bot.keyboards.docType import docTypes
 from tg_bot.keyboards.consultType import typeCons
+from tg_bot.keyboards.default import default
 router = Router()
-from bot import Bot
-bot = Bot
 
 
 class Form(StatesGroup):
@@ -34,7 +33,7 @@ class Form(StatesGroup):
     time = State()
 
 
-@router.message(Command('reg'))
+@router.message(F.text == "Записаться на консультацию")
 async def name(message: Message, state: FSMContext) -> None:
     data = await state.get_data()
     await state.set_state(Form.name)
@@ -42,7 +41,6 @@ async def name(message: Message, state: FSMContext) -> None:
         "Введите Ваше имя",
         reply_markup=ReplyKeyboardRemove(),
     )
-
 
 
 
@@ -110,7 +108,7 @@ async def time(message: Message, state: FSMContext) -> None:
     if message.text == 'отмена':
         await state.clear()
 @router.message(Form.time)
-async def end(message: Message, state: FSMContext) -> None:
+async def end(message: Message, state: FSMContext, bot: Bot) -> None:
     await state.update_data(time=message.text)
     await state.set_state(Form.time)
     data = await state.get_data()
@@ -146,6 +144,6 @@ async def end(message: Message, state: FSMContext) -> None:
     )
     await state.clear()
     await message.answer(response_message2)
-     #await bot.send_message(chat_id=6613581898, text=response_message)
+    await bot.send_message(chat_id=6613581898, text=response_message)
 
 

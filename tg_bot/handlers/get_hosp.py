@@ -6,8 +6,9 @@ from aiogram.filters import Command
 from aiogram.types.input_file import FSInputFile
 router = Router()
 
-@router.message(Command('get_hosp'))
+@router.message(F.text == "Памятка по госпитализации")
 async def cmd_random(message: types.Message):
+
         builder = InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text='Анализы для операции по "Малой проктологии"', callback_data='small')],
                                                         [InlineKeyboardButton(text='Анализы при операции по "Общей хирургии"', callback_data='general')],
                                                         [InlineKeyboardButton(

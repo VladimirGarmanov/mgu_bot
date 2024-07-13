@@ -5,6 +5,7 @@ from aiogram.filters import Command
 from tg_bot.keyboards.doc_details import docs
 
 router = Router()
+from tg_bot.keyboards.default import default
 
 
 @router.message(Command('doc_details'))

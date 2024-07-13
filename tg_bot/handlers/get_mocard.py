@@ -5,7 +5,6 @@ from aiogram.types import Message, InlineKeyboardMarkup, InlineKeyboardButton
 from aiogram.filters import Command
 from aiogram.types.input_file import FSInputFile
 router = Router()
-bot = Bot(token='6517527928:AAHtrSHL1C0B7A5ALXapsYrjVl-h9UY-cpc')
 @router.message(Command('get_moncard'))
 async def cmd_random(message: types.Message):
         builder = InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text='Рак прямой кишки', callback_data='random_value')],
