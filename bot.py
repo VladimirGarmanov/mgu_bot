@@ -354,31 +354,34 @@ async def main():
     os.umask(0o077)
     settings = Settings.load()
     store = Store(settings.database)
-    lock = settings.database.with_suffix('.lock').open('w')
-    fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
-    logging.getLogger('httpx').setLevel(logging.CRITICAL)
-    logging.getLogger('httpcore').setLevel(logging.CRITICAL)
-    async with httpx.AsyncClient(timeout=45) as client:
-        bot = Bot(settings, client, store)
-        await bot.validate()
-        while True:
-            try:
-                store.cleanup(settings.retention)
-                row = store.db.execute("SELECT value FROM state WHERE key='offset'").fetchone()
-                offset = row[0] if row else 0
-                updates = await bot.telegram('getUpdates', offset=offset, timeout=25, allowed_updates=['message', 'channel_post', 'my_chat_member'])
-                for update in updates:
-                    try:
-                        await bot.process(update)
-                    except RuntimeError:
-                        # State is persisted before a reply. Replaying this update could
-                        # incorrectly consume the old answer as the next intake field.
-                        print('Reply unavailable; update acknowledged. Patient can resume or use /start.', flush=True)
-                    with store.db:
-                        store.db.execute("INSERT OR REPLACE INTO state VALUES('offset',?)", (update['update_id']+1,))
-            except RuntimeError:
-                print('Temporary Telegram failure; reconnecting. No request details logged.', flush=True)
-                await asyncio.sleep(5)
+    with settings.database.with_suffix('.lock').open('w') as lock:
+        fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        logging.getLogger('httpx').setLevel(logging.CRITICAL)
+        logging.getLogger('httpcore').setLevel(logging.CRITICAL)
+        async with httpx.AsyncClient(timeout=45) as client:
+            bot = Bot(settings, client, store)
+            await bot.validate()
+            while True:
+                try:
+                    store.cleanup(settings.retention)
+                    # Resume persisted requests before waiting for new Telegram messages.
+                    await bot.flush()
+                    row = store.db.execute("SELECT value FROM state WHERE key='offset'").fetchone()
+                    offset = row[0] if row else 0
+                    updates = await bot.telegram('getUpdates', offset=offset, timeout=25, allowed_updates=['message', 'channel_post', 'my_chat_member'])
+                    for update in updates:
+                        try:
+                            await bot.process(update)
+                        except RuntimeError:
+                            # State is persisted before a reply. Replaying this update could
+                            # incorrectly consume the old answer as the next intake field.
+                            print('Reply unavailable; update acknowledged. Patient can resume or use /start.', flush=True)
+                        with store.db:
+                            store.db.execute("INSERT OR REPLACE INTO state VALUES('offset',?)", (update['update_id']+1,))
+                    await bot.flush()
+                except RuntimeError:
+                    print('Temporary Telegram failure; reconnecting. No request details logged.', flush=True)
+                    await asyncio.sleep(5)
 
 if __name__ == '__main__':
     try:

@@ -4,9 +4,9 @@ from pathlib import Path
 import tempfile
 import time
 import unittest
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, patch
 import httpx
-from bot import Bot, Settings, Store
+from bot import Bot, Settings, Store, main
 
 class BotTest(unittest.IsolatedAsyncioTestCase):
     async def asyncSetUp(self):
@@ -17,12 +17,12 @@ class BotTest(unittest.IsolatedAsyncioTestCase):
         self.bot = Bot(self.settings, self.client, self.store)
         self.chats = {-100123: {'id': -100123, 'type': 'supergroup', 'title': 'Clinic A'}}
         self.members = {-100123: {'status': 'administrator'}}
-        self.fail = set()
+        self.failed_chats = set()
         async def telegram(method, **args):
             if method == 'getMe': return {'id': 1}
             if method == 'getChat': return self.chats[args['chat_id']]
             if method == 'getChatMember': return self.members.get(args['chat_id'], {'status': 'left'})
-            if method == 'sendMessage' and args['chat_id'] in self.fail: raise RuntimeError('offline')
+            if method == 'sendMessage' and args['chat_id'] in self.failed_chats: raise RuntimeError('offline')
             if method == 'getWebhookInfo': return {}
             return {'message_id': 55}
         self.telegram_stub = telegram
@@ -108,11 +108,11 @@ class BotTest(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(len(self.store.get(15)['destinations']), 2)
         self.assertTrue(any('публичный @clinic_public' in c.kwargs.get('text','') for c in self.bot.telegram.await_args_list))
         await self.message('Отправить заявку')
-        self.fail.add(-100222)
+        self.failed_chats.add(-100222)
         await self.bot.flush()
         self.assertEqual(self.store.db.execute('SELECT sent FROM recipients WHERE chat=-100123').fetchone()[0], 55)
         self.assertEqual(self.store.db.execute('SELECT notified FROM delivery').fetchone()[0], 0)
-        self.fail.clear()
+        self.failed_chats.clear()
         with self.store.db: self.store.db.execute('UPDATE delivery SET next_attempt=0')
         await self.bot.flush()
         group_calls = [c for c in self.bot.telegram.await_args_list if c.args[0]=='sendMessage' and c.kwargs.get('chat_id')==-100123]
@@ -150,6 +150,36 @@ class BotTest(unittest.IsolatedAsyncioTestCase):
         other = Store(self.settings.database)
         try: self.assertEqual(other.db.execute('SELECT active FROM destinations WHERE chat=-100123').fetchone()[0], 1)
         finally: other.db.close()
+
+    async def run_main_until_next_poll(self, updates):
+        batches = iter(updates)
+        async def telegram(method, **args):
+            if method == 'getUpdates':
+                try:
+                    return next(batches)
+                except StopIteration:
+                    raise asyncio.CancelledError
+            return await self.telegram_stub(method, **args)
+        self.bot.telegram.side_effect = telegram
+        with patch('bot.Settings.load', return_value=self.settings), patch('bot.Store', return_value=self.store), patch('bot.Bot', return_value=self.bot):
+            with self.assertRaises(asyncio.CancelledError):
+                await main()
+
+    async def test_main_delivers_existing_queue_without_new_messages(self):
+        await self.fill()
+        await self.message('Отправить заявку')
+        await self.run_main_until_next_poll([])
+        row = self.store.db.execute('SELECT sent,notified FROM delivery').fetchone()
+        self.assertEqual(tuple(row), (1, 1))
+
+    async def test_main_delivers_new_confirmation_and_does_not_duplicate(self):
+        await self.fill()
+        update = {'update_id': 100, 'message': {'chat': {'id': 15, 'type': 'private'}, 'from': {'id': 15}, 'text': 'Отправить заявку'}}
+        await self.run_main_until_next_poll([[update], []])
+        row = self.store.db.execute('SELECT sent,notified FROM delivery').fetchone()
+        self.assertEqual(tuple(row), (1, 1))
+        deliveries = [call for call in self.bot.telegram.await_args_list if call.args[0] == 'sendMessage' and call.kwargs.get('chat_id') == -100123]
+        self.assertEqual(len(deliveries), 1)
 
 if __name__ == '__main__':
     unittest.main()
