@@ -1,0 +1,26 @@
+[Unit]
+Description=Uniclinic Telegram intake assistant
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=uniclinic-bot
+Group=uniclinic-bot
+WorkingDirectory=/opt/uniclinic/TelegramBot
+EnvironmentFile=/opt/uniclinic/TelegramBot/.env
+Environment=BOT_DB_PATH=/var/lib/uniclinic-bot/intake.sqlite
+ExecStart=/opt/uniclinic/TelegramBot/.venv/bin/python /opt/uniclinic/TelegramBot/bot.py
+Restart=on-failure
+RestartSec=10
+UMask=0077
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+StateDirectory=uniclinic-bot
+StateDirectoryMode=0700
+ReadWritePaths=/var/lib/uniclinic-bot
+
+[Install]
+WantedBy=multi-user.target
