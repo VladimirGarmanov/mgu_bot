@@ -15,6 +15,7 @@ import httpx
 from dotenv import load_dotenv
 
 CONSENT = '2026-10-11-multichat'
+MENU = {'keyboard': [[{'text': 'Записаться'}, {'text': 'Перезвоните мне'}]], 'resize_keyboard': True}
 PHONE = '+7 (967) 136-77-06'
 EMERGENCY = 'Если состояние угрожает жизни, есть сильное кровотечение, потеря сознания или затруднение дыхания — звоните 112 или 103. Не ждите ответа в чате.'
 
@@ -39,6 +40,7 @@ class Settings:
         if group and not re.fullmatch(r'-\d+', group):
             raise RuntimeError('Необязательный TELEGRAM_GROUP_ID должен быть отрицательным числом')
         instructions = Path(os.getenv('BOT_INSTRUCTIONS_PATH') or Path(__file__).with_name('instructions.txt')).read_text()
+        instructions += '\n\nСПРАВОЧНИК КЛИНИКИ (информация владельца, 21.10.2026):\n' + Path(__file__).with_name('knowledge.txt').read_text()
         return cls(token, int(group) if group else None, int(os.environ['TELEGRAM_TOPIC_ID']) if os.getenv('TELEGRAM_TOPIC_ID') else None,
                    os.getenv('OPENAI_API_KEY', ''), os.getenv('OPENAI_MODEL', 'gpt-5-mini'),
                    Path(os.getenv('BOT_DB_PATH', './data/telegram-bot.sqlite')), instructions,
@@ -145,7 +147,7 @@ class Bot:
         if not targets:
             await self.say(chat, 'Пока нет подключённых чатов клиники. Заявка не отправлена. Позвоните '+PHONE+' или повторите «Отправить заявку» позже.')
             return
-        await self.say(chat, 'Получатели заявки (все подключённые чаты, где бот администратор):')
+        await self.say(chat, 'Заявку получат сотрудники в следующих чатах клиники:')
         # Keep every destination visible even if the registry exceeds Telegram's message limit.
         lines = [f'• {t["title"][:150]} · {"канал" if t["kind"] == "channel" else "группа"}' + (' · публичный @'+t['username'] if t['username'] else '') for t in targets]
         chunk = ''
@@ -155,7 +157,7 @@ class Bot:
             chunk += line+'\n'
         if chunk:
             await self.say(chat, chunk)
-        await self.say(chat, 'Подтверждаете передачу имени, телефона и описания обращения всем перечисленным получателям? /cancel — отменить, /start — заполнить заново.',
+        await self.say(chat, 'Всё верно? Нажмите «Отправить заявку», чтобы передать эти данные указанным получателям. Исправить: /start. Отменить: /cancel.',
                        {'keyboard': [[{'text': 'Отправить заявку'}]], 'resize_keyboard': True, 'one_time_keyboard': True})
     async def validate(self):
         await self.identity()
@@ -164,24 +166,48 @@ class Bot:
         if self.settings.group:
             await self.discover(self.settings.group)
         print('Telegram verified. Admin chats are discovered automatically.', flush=True)
-    async def ai_reply(self, concern):
+    async def ai_reply(self, concern, history=None):
         if not self.settings.key:
-            return 'Спасибо, я сохраню описание для сотрудников клиники. Врач сможет обсудить медицинские вопросы на консультации.'
+            return self.fallback_reply(concern)
         # Separately collected name/phone/Telegram IDs are excluded. Redact contacts in free text too.
         redacted = re.sub(r'\+?\d[\d ()-]{6,}\d|[\w.+-]+@[\w.-]+|https?://\S+|@\w+', '[контакт скрыт]', concern)
         try:
             response = await self.client.post('https://api.openai.com/v1/responses', headers={'Authorization': 'Bearer '+self.settings.key}, json={
                 'model': self.settings.model, 'instructions': self.settings.instructions,
-                'input': [{'role': 'user', 'content': redacted}], 'store': False, 'max_output_tokens': 1200,
+                'input': (history or [])[-6:] + [{'role': 'user', 'content': redacted}], 'store': False, 'max_output_tokens': 2000,
             })
             response.raise_for_status()
             body = response.json()
             if body.get('status') != 'completed':
-                return 'Описание сохранено. Медицинские вопросы передадим сотрудникам клиники.'
+                return self.fallback_reply(concern)
             text = '\n'.join(part.get('text', '') for item in body.get('output', []) if item.get('type') == 'message' for part in item.get('content', []) if part.get('type') == 'output_text')
-            return text[:1600] or 'Описание сохранено для сотрудников клиники.'
+            return text[:3500] or self.fallback_reply(concern)
         except (httpx.HTTPError, ValueError, KeyError):
-            return 'Описание сохранено. Продолжим оформление обращения для сотрудников клиники.'
+            return self.fallback_reply(concern)
+    @staticmethod
+    def fallback_reply(text):
+        text = text.lower()
+        if re.search(r'адрес|добраться|где наход|контакт', text):
+            return f'Москва, Ломоносовский проспект, 27, корпус 10. Телефон {PHONE}, почта info@uniclinic.pro. Карта: https://uniclinic.pro/contacts.'
+        if 'колоноскоп' in text:
+            return 'Запись на колоноскопию: +7 (910) 666-34-32 — заведующий отделением Бабаджанян Арутюн Родионович.'
+        if 'омс' in text or '057' in text:
+            return 'Для консультации по ОМС в клинике требуется направление 057/у из государственной поликлиники. Возможность лечения по ОМС для вашего случая уточнит сотрудник — можно заказать обратный звонок.'
+        if re.search(r'онлайн|дистанц', text):
+            return 'Онлайн-консультации возможны. Нажмите «Записаться»: укажите врача и удобное время, а сотрудник согласует детали.'
+        if re.search(r'^привет|^здравств|^добрый', text):
+            return 'Здравствуйте! Помогу разобраться с записью, консультациями и условиями лечения. Что хотите уточнить?'
+        return f'Сейчас не получается уточнить этот вопрос автоматически. Можно заказать звонок кнопкой «Перезвоните мне» или связаться с клиникой: {PHONE}.'
+    async def answer_question(self, chat, state, question):
+        if not 3 <= len(question) <= 1500:
+            await self.say(chat, 'Напишите вопрос текстом, до 1500 символов.'); return
+        history = state.get('history', [])
+        answer = await self.ai_reply(question, history) if state.get('ai') else self.fallback_reply(question)
+        # Collected appointment fields never enter model context.
+        redacted = re.sub(r'\+?\d[\d ()-]{6,}\d|[\w.+-]+@[\w.-]+|https?://\S+|@\w+', '[контакт скрыт]', question)
+        state['history'] = (history + [{'role': 'user', 'content': redacted}, {'role': 'assistant', 'content': answer}])[-6:]
+        self.store.save(chat, state)
+        await self.say(chat, answer, MENU if state['step'] == 'chat' else None)
     async def process(self, update):
         membership = update.get('my_chat_member')
         if membership:
@@ -223,10 +249,11 @@ class Bot:
                 return
             text = ''
         if text == '/help':
-            await self.say(chat_id, f'Я виртуальный помощник клиники. /start — начать; /cancel — отменить; /delete — удалить неотправленное; /operator — без OpenAI; /ask ваш вопрос — вопрос помощнику после согласия. Телефон клиники: {PHONE}. {EMERGENCY}')
+            await self.say(chat_id, f'Задайте вопрос обычным сообщением или выберите запись / обратный звонок. /start — начать заново; /cancel — отменить; /delete — удалить неотправленное; /operator — обращение без OpenAI. Телефон: {PHONE}.')
             return
         if re.search(r'не могу дышать|теряю сознание|сильн\w* кровотеч|кровь не останавливается|сильн\w* боль в груди', text.lower()):
             await self.say(chat_id, EMERGENCY)
+            return
         state = self.store.get(chat_id)
         if text == '/operator':
             state = {'step': 'consent', 'ai': False}
@@ -234,19 +261,37 @@ class Bot:
             text = ''
         if state['step'] == 'consent':
             if text != 'Согласен':
-                await self.say(chat_id, 'Я виртуальный помощник, не врач. Соберу имя, причину обращения и контакт. Перед отправкой покажу заявку: она будет передана во все подключённые группы и каналы, где бот администратор. Перед подтверждением вы увидите список получателей, включая отметки публичных чатов. '+('Краткое описание может обрабатываться OpenAI; не пишите в нём имя, телефон и другие идентифицирующие сведения. Для обращения без OpenAI: /operator. ' if state.get('ai', True) else 'OpenAI для этого обращения отключён. ')+'Политика: https://uniclinic.pro/privacy. Подтверждаете обработку и передачу указанных данных для ответа клиники? /cancel — отказаться.', {'keyboard': [[{'text': 'Согласен'}]], 'resize_keyboard': True, 'one_time_keyboard': True})
+                await self.say(chat_id, 'Здравствуйте! Я виртуальный помощник Клиники МГУ. Подскажу по стоимости, ОМС и консультациям, помогу оставить заявку.\n\n'+('Вопросы обрабатываются OpenAI — не указывайте в переписке личные данные. Режим без OpenAI: /operator. ' if state.get('ai', True) else 'Вы выбрали режим без OpenAI. ')+'При записи отдельно попрошу имя и телефон; перед передачей покажу заявку и список чатов клиники.\nПолитика: https://uniclinic.pro/privacy. Нажимая «Согласен», вы соглашаетесь на обработку данных для ответа и передачи заявки. Отмена: /cancel.', {'keyboard': [[{'text': 'Согласен'}]], 'resize_keyboard': True, 'one_time_keyboard': True})
                 return
-            state.update(step='name', consent=CONSENT, consent_at=time.time(), ai=state.get('ai', True))
+            state.update(step='chat', consent=CONSENT, consent_at=time.time(), ai=state.get('ai', True))
             self.store.save(chat_id, state)
-            await self.say(chat_id, 'Как к вам обращаться? Достаточно имени.')
+            await self.say(chat_id, 'Что хотите уточнить? Можно написать вопрос или выбрать запись / обратный звонок.', MENU)
+            return
+        if state['step'] == 'chat':
+            if re.fullmatch(r'(?:пожалуйста[, ]+)?(?:перезвоните(?: мне)?|хочу (?:обратный )?звонок)[.! ]*', text.lower()):
+                text = 'Перезвоните мне'
+            elif re.fullmatch(r'(?:хочу |хотел(?:а)? бы )?записаться(?: на (?:при[её]м|консультацию))?[.! ]*', text.lower()):
+                text = 'Записаться'
+        if text in {'Записаться', 'Перезвоните мне'}:
+            state.update(step='name', request_type='callback' if text == 'Перезвоните мне' else 'appointment', history=[])
+            for key in ('name', 'phone', 'concern', 'duration', 'destinations'):
+                state.pop(key, None)
+            self.store.save(chat_id, state)
+            await self.say(chat_id, 'Как к вам обращаться? Достаточно имени.' if state['request_type'] == 'callback' else 'Напишите, пожалуйста, фамилию, имя и отчество для записи.')
             return
         if text.startswith('/ask '):
             question = text[5:].strip()
             if not 3 <= len(question) <= 1500:
                 await self.say(chat_id, 'После /ask напишите вопрос длиной от 3 до 1500 символов.')
                 return
-            answer = await self.ai_reply(question) if state.get('ai') else 'OpenAI отключён. Передайте вопрос сотрудникам через описание обращения или позвоните в клинику.'
-            await self.say(chat_id, answer + '\n\nМожно продолжить анкету с предыдущего вопроса или начать заново: /start.')
+            await self.answer_question(chat_id, state, question)
+            return
+        if state['step'] == 'chat':
+            await self.answer_question(chat_id, state, text)
+            return
+        if '?' in text and state['step'] != 'concern':
+            await self.answer_question(chat_id, state, text)
+            await self.say(chat_id, 'Данные заявки ещё не отправлены. Продолжите с предыдущего вопроса или /cancel — отменить.')
             return
         if not text and not message.get('contact'):
             await self.say(chat_id, 'Пожалуйста, ответьте текстом. Документы, фото и голосовые сообщения бот не обрабатывает.')
@@ -254,9 +299,20 @@ class Bot:
         if state['step'] == 'name':
             if not 1 <= len(text) <= 80 or text.startswith('/'):
                 await self.say(chat_id, 'Напишите имя, до 80 символов.'); return
-            state.update(name=text, step='concern')
+            state.update(name=text, step='phone' if state.get('request_type') == 'callback' else 'details')
             self.store.save(chat_id, state)
-            await self.say(chat_id, 'Что вас беспокоит или по какому вопросу хотите обратиться? Кратко опишите, без документов и личных данных.')
+            if state['step'] == 'phone':
+                state.update(concern='Обратный звонок', duration='')
+                self.store.save(chat_id, state)
+                await self.ask_phone(chat_id)
+            else:
+                await self.say(chat_id, 'К какому врачу хотите записаться и какое время удобно? Если врача ещё не выбрали, напишите цель консультации. Для онлайн-приёма добавьте «онлайн».')
+        elif state['step'] == 'details':
+            if not 3 <= len(text) <= 1500:
+                await self.say(chat_id, 'Напишите пожелания к записи текстом, до 1500 символов.'); return
+            state.update(concern=text, duration='', step='phone')
+            self.store.save(chat_id, state)
+            await self.ask_phone(chat_id)
         elif state['step'] == 'concern':
             if not 3 <= len(text) <= 1500:
                 await self.say(chat_id, 'Опишите вопрос текстом от 3 до 1500 символов.'); return
@@ -269,7 +325,7 @@ class Bot:
                 await self.say(chat_id, 'Ответьте кратко, до 250 символов.'); return
             state.update(duration=text, step='phone')
             self.store.save(chat_id, state)
-            await self.say(chat_id, 'Оставьте телефон для связи или отправьте свой контакт кнопкой.', {'keyboard': [[{'text': 'Отправить мой телефон', 'request_contact': True}]], 'resize_keyboard': True, 'one_time_keyboard': True})
+            await self.ask_phone(chat_id)
         elif state['step'] == 'phone':
             contact = message.get('contact')
             if contact and contact.get('user_id') != message.get('from', {}).get('id'):
@@ -293,10 +349,15 @@ class Bot:
                 await self.show_confirmation(chat_id, state)
                 return
             code = self.store.queue(chat_id, state)
-            await self.say(chat_id, f'Заявка {code} сохранена и ожидает передачи. Я сообщу, когда она будет доставлена сотрудникам. Это ещё не подтверждение записи на приём.')
+            self.store.save(chat_id, {'step': 'chat', 'ai': state.get('ai', True), 'consent': state['consent'], 'consent_at': state['consent_at']})
+            await self.say(chat_id, f'Заявка {code} принята. Сейчас отправлю её сотрудникам и сообщу о доставке. Время приёма согласует администратор.', MENU)
+    async def ask_phone(self, chat):
+        await self.say(chat, 'На какой номер вам позвонить? Введите телефон или отправьте свой контакт кнопкой.', {'keyboard': [[{'text': 'Отправить мой телефон', 'request_contact': True}]], 'resize_keyboard': True, 'one_time_keyboard': True})
     @staticmethod
     def summary(state):
-        return f'Имя: {state["name"]}\nТелефон: {state["phone"]}\nОбращение: {state["concern"]}\nКак давно: {state["duration"]}'
+        kind = 'Обратный звонок' if state.get('request_type') == 'callback' else 'Запись / консультация'
+        summary = f'{kind}\nИмя: {state["name"]}\nТелефон: {state["phone"]}\nПожелания: {state["concern"]}'
+        return summary + (f'\nКак давно: {state["duration"]}' if state.get('duration') else '')
     async def flush(self):
         rows = self.store.db.execute('SELECT * FROM delivery WHERE (sent=0 OR notified=0) AND next_attempt<=? ORDER BY created LIMIT 10', (time.time(),)).fetchall()
         for row in rows:

@@ -41,7 +41,7 @@ class BotTest(unittest.IsolatedAsyncioTestCase):
             message['contact'] = contact
         await self.bot.process({'update_id': self.index, 'message': message})
     async def fill(self):
-        for text in ['/start', 'Согласен', 'Тест', 'Хочу консультацию', 'Две недели', '+79990001234']:
+        for text in ['/start', 'Согласен', 'Записаться', 'Тест', 'Хочу консультацию', '+79990001234']:
             await self.message(text)
     async def test_consent_preview_and_exact_destination(self):
         await self.message('Несогласованный медицинский текст')
@@ -76,7 +76,7 @@ class BotTest(unittest.IsolatedAsyncioTestCase):
         await self.fill(); await self.message('Отправить заявку'); await self.message('/delete')
         self.assertEqual(self.store.db.execute('SELECT COUNT(*) FROM delivery').fetchone()[0], 0)
     async def test_contact_must_belong_to_sender(self):
-        for text in ['Согласен', 'Тест', 'Вопрос', 'Неделя']:
+        for text in ['Согласен', 'Записаться', 'Тест', 'Вопрос']:
             await self.message(text)
         await self.message(contact={'user_id': 999, 'phone_number': '+79990001234'})
         self.assertEqual(self.store.get(15)['step'], 'phone')
@@ -95,10 +95,32 @@ class BotTest(unittest.IsolatedAsyncioTestCase):
         self.assertNotIn('999 000', json.dumps(requests))
         self.assertNotIn('tools', requests[0])
     async def test_operator_disables_ai(self):
-        await self.message('/operator'); await self.message('Согласен'); await self.message('Тест')
+        await self.message('/operator'); await self.message('Согласен'); await self.message('Записаться'); await self.message('Тест')
         self.bot.ai_reply = AsyncMock()
         await self.message('Нужна консультация')
         self.bot.ai_reply.assert_not_awaited()
+
+    async def test_conversation_then_callback_without_medical_question(self):
+        await self.message('Согласен')
+        self.bot.ai_reply = AsyncMock(return_value='Первичный приём — 2 500 ₽.')
+        await self.message('Сколько стоит консультация?')
+        self.assertEqual(self.store.get(15)['step'], 'chat')
+        await self.message('Перезвоните мне')
+        await self.message('Тест')
+        self.assertEqual(self.store.get(15)['step'], 'phone')
+        await self.message('+79990001234')
+        await self.message('Отправить заявку')
+        await self.bot.flush()
+        self.assertEqual(self.store.db.execute('SELECT sent FROM delivery').fetchone()[0], 1)
+        self.assertEqual(self.store.get(15)['step'], 'chat')
+
+    async def test_question_during_intake_does_not_become_phone(self):
+        for text in ['Согласен', 'Перезвоните мне', 'Тест']:
+            await self.message(text)
+        self.bot.ai_reply = AsyncMock(return_value='Москва, Ломоносовский проспект, 27, корпус 10.')
+        await self.message('Где находится клиника?')
+        self.assertEqual(self.store.get(15)['step'], 'phone')
+        self.assertNotIn('phone', self.store.get(15))
 
     async def test_all_admin_chats_and_independent_retries(self):
         self.chats[-100222] = {'id': -100222, 'type': 'channel', 'title': 'Clinic B', 'username': 'clinic_public'}
