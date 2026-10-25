@@ -128,7 +128,7 @@ class BotTest(unittest.IsolatedAsyncioTestCase):
         await self.bot.process({'my_chat_member': {'chat': self.chats[-100222], 'new_chat_member': self.members[-100222]}})
         await self.fill()
         self.assertEqual(len(self.store.get(15)['destinations']), 2)
-        self.assertTrue(any('публичный @clinic_public' in c.kwargs.get('text','') for c in self.bot.telegram.await_args_list))
+        self.assertFalse(any('clinic_public' in c.kwargs.get('text','') or 'Clinic A' in c.kwargs.get('text','') or 'Clinic B' in c.kwargs.get('text','') for c in self.bot.telegram.await_args_list))
         await self.message('Отправить заявку')
         self.failed_chats.add(-100222)
         await self.bot.flush()

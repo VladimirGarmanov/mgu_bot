@@ -145,19 +145,9 @@ class Bot:
         self.store.save(chat, state)
         await self.say(chat, self.summary(state))
         if not targets:
-            await self.say(chat, 'Пока нет подключённых чатов клиники. Заявка не отправлена. Позвоните '+PHONE+' или повторите «Отправить заявку» позже.')
+            await self.say(chat, 'Сейчас не получается отправить заявку. Позвоните '+PHONE+' или повторите «Отправить заявку» позже.')
             return
-        await self.say(chat, 'Заявку получат сотрудники в следующих чатах клиники:')
-        # Keep every destination visible even if the registry exceeds Telegram's message limit.
-        lines = [f'• {t["title"][:150]} · {"канал" if t["kind"] == "channel" else "группа"}' + (' · публичный @'+t['username'] if t['username'] else '') for t in targets]
-        chunk = ''
-        for line in lines:
-            if len(chunk)+len(line)>3500:
-                await self.say(chat, chunk); chunk = ''
-            chunk += line+'\n'
-        if chunk:
-            await self.say(chat, chunk)
-        await self.say(chat, 'Всё верно? Нажмите «Отправить заявку», чтобы передать эти данные указанным получателям. Исправить: /start. Отменить: /cancel.',
+        await self.say(chat, 'Всё верно? Нажмите «Отправить заявку». Исправить данные: /start. Отменить: /cancel.',
                        {'keyboard': [[{'text': 'Отправить заявку'}]], 'resize_keyboard': True, 'one_time_keyboard': True})
     async def validate(self):
         await self.identity()
@@ -261,7 +251,7 @@ class Bot:
             text = ''
         if state['step'] == 'consent':
             if text != 'Согласен':
-                await self.say(chat_id, 'Здравствуйте! Я виртуальный помощник Клиники МГУ. Подскажу по стоимости, ОМС и консультациям, помогу оставить заявку.\n\n'+('Вопросы обрабатываются OpenAI — не указывайте в переписке личные данные. Режим без OpenAI: /operator. ' if state.get('ai', True) else 'Вы выбрали режим без OpenAI. ')+'При записи отдельно попрошу имя и телефон; перед передачей покажу заявку и список чатов клиники.\nПолитика: https://uniclinic.pro/privacy. Нажимая «Согласен», вы соглашаетесь на обработку данных для ответа и передачи заявки. Отмена: /cancel.', {'keyboard': [[{'text': 'Согласен'}]], 'resize_keyboard': True, 'one_time_keyboard': True})
+                await self.say(chat_id, 'Здравствуйте! Я виртуальный помощник Клиники МГУ. Подскажу по стоимости, ОМС и консультациям, помогу оставить заявку.\n\n'+('Вопросы обрабатываются OpenAI — не указывайте в переписке личные данные. Режим без OpenAI: /operator. ' if state.get('ai', True) else 'Вы выбрали режим без OpenAI. ')+'При записи отдельно попрошу имя и телефон; перед отправкой покажу заявку для проверки.\nПолитика: https://uniclinic.pro/privacy. Нажимая «Согласен», вы соглашаетесь на обработку данных для ответа и передачи заявки. Отмена: /cancel.', {'keyboard': [[{'text': 'Согласен'}]], 'resize_keyboard': True, 'one_time_keyboard': True})
                 return
             state.update(step='chat', consent=CONSENT, consent_at=time.time(), ai=state.get('ai', True))
             self.store.save(chat_id, state)
@@ -400,9 +390,9 @@ class Bot:
                 if receipts['total'] == 0:  # Already delivered by the previous single-chat version.
                     result = 'передана сотрудникам клиники'
                 elif receipts['delivered']:
-                    result = f'передана: {receipts["delivered"]} из {receipts["total"]} чатов'
+                    result = 'передана сотрудникам клиники' if receipts['delivered'] == receipts['total'] else 'передана частично. Уточните получение по телефону клиники'
                 else:
-                    result = 'не доставлена: у получателей сняты права или изменены условия доступа'
+                    result = 'не доставлена. Пожалуйста, позвоните в клинику'
                 await self.say(row['chat'], f'Заявка {row["code"]} {result}. Телефон клиники: {PHONE}.')
                 with self.store.db:
                     self.store.db.execute('UPDATE delivery SET notified=1 WHERE code=?', (row['code'],))
